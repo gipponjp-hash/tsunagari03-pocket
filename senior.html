@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>つながりポケット</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="config.js"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      background: #FFF8E7;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    .header {
+      background: linear-gradient(135deg, #06C755, #00B900);
+      color: white;
+      width: 100%;
+      padding: 25px;
+      border-radius: 20px;
+      text-align: center;
+      margin-bottom: 25px;
+    }
+    .header h1 { font-size: 32px; margin-bottom: 8px; }
+    .header p { font-size: 18px; opacity: 0.9; }
+    .status-box {
+      background: white;
+      width: 100%;
+      padding: 35px;
+      border-radius: 20px;
+      text-align: center;
+      margin-bottom: 25px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .status-icon { font-size: 90px; margin-bottom: 15px; }
+    .status-text { font-size: 28px; font-weight: bold; margin-bottom: 10px; }
+    .status-green { color: #06C755; }
+    .status-yellow { color: #F5A623; }
+    .status-red { color: #E74C3C; }
+    .status-time { font-size: 18px; color: #666; }
+    .btn {
+      width: 100%;
+      padding: 28px;
+      border: none;
+      border-radius: 18px;
+      font-size: 26px;
+      font-weight: bold;
+      margin-bottom: 18px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn-checkin { background: #06C755; color: white; }
+    .btn-call { background: #4A90E2; color: white; }
+    .btn-sos { background: #E74C3C; color: white; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.03);} }
+    .footer { margin-top: auto; font-size: 16px; color: #999; text-align: center; padding-top: 20px; }
+    .loading { font-size: 20px; color: #666; margin-top: 15px; text-align: center; min-height: 28px; }
+    .sos-modal {
+      display: none; position: fixed; top:0; left:0; right:0; bottom:0;
+      background: rgba(0,0,0,0.85); justify-content: center; align-items: center; z-index: 1000;
+    }
+    .sos-modal.active { display: flex; }
+    .sos-content {
+      background: white; padding: 40px; border-radius: 20px; text-align: center;
+      max-width: 380px; width: 90%;
+    }
+    .sos-content h2 { font-size: 32px; color: #E74C3C; margin-bottom: 20px; }
+    .sos-content p { font-size: 20px; margin-bottom: 30px; color: #333; }
+    .sos-btn-group { display: flex; gap: 15px; }
+    .sos-btn { flex: 1; padding: 22px; border: none; border-radius: 14px; font-size: 22px; font-weight: bold; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>つながりポケット</h1>
+    <p>いつもつながっています</p>
+  </div>
+
+  <div class="status-box">
+    <div class="status-icon" id="icon">🌸</div>
+    <div class="status-text" id="statusText">読み込み中...</div>
+    <div class="status-time" id="statusTime">--</div>
+  </div>
+
+  <button class="btn btn-checkin" onclick="checkIn()">📋 今日の様子を報告</button>
+  <button class="btn btn-call" onclick="callFamily()">💬 家族と話す</button>
+  <button class="btn btn-sos" onclick="showSOS()">🆘 SOS（緊急）</button>
+
+  <div class="loading" id="loading"></div>
+  <div class="footer">つながりポケット | 高齢者安否確認システム</div>
+
+  <div class="sos-modal" id="sosModal">
+    <div class="sos-content">
+      <h2>🆘 SOS</h2>
+      <p>家族に緊急通知を<br>送信しますか？</p>
+      <div class="sos-btn-group">
+        <button class="sos-btn" style="background:#ccc;color:#333;" onclick="hideSOS()">キャンセル</button>
+        <button class="sos-btn" style="background:#E74C3C;color:white;" onclick="sendSOS()">送信する</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let userId = '';
+
+    async function init() {
+      try {
+        await liff.init({ liffId: CONFIG.LIFF_ID_SENIOR });
+        if (!liff.isLoggedIn()) { liff.login(); return; }
+        const profile = await liff.getProfile();
+        userId = profile.userId;
+        document.querySelector('.header h1').textContent = profile.displayName + 'さん';
+        loadStatus();
+      } catch (err) {
+        document.getElementById('statusText').textContent = 'エラーが発生しました';
+        console.error(err);
+      }
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch(CONFIG.GAS_URL + '?action=getStatus&userId=' + userId);
+        const data = await res.json();
+        if (data.status === 'ok') {
+          const emoji = {green:'🌿', yellow:'⏰', red:'⚠️'};
+          const text = {green:'今日も元気です！', yellow:'確認待ち', red:'確認が必要です'};
+          const cls = {green:'status-green', yellow:'status-yellow', red:'status-red'};
+          document.getElementById('icon').textContent = emoji[data.checkInStatus] || '⚪';
+          const st = document.getElementById('statusText');
+          st.textContent = text[data.checkInStatus] || '不明';
+          st.className = 'status-text ' + (cls[data.checkInStatus] || '');
+          document.getElementById('statusTime').textContent = data.lastCheckIn
+            ? '最終確認: ' + formatDate(data.lastCheckIn)
+            : '最終確認: 未確認';
+        }
+      } catch (e) {
+        document.getElementById('statusText').textContent = 'データ取得エラー';
+      }
+    }
+
+    function formatDate(isoStr) {
+      const d = new Date(isoStr);
+      return (d.getMonth()+1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+    }
+
+    async function checkIn() {
+      document.getElementById('loading').textContent = '送信中...';
+      try {
+        const res = await fetch(CONFIG.GAS_URL + '?action=recordCheckIn&userId=' + userId + '&type=manual');
+        const data = await res.json();
+        if (data.status === 'ok') {
+          document.getElementById('icon').textContent = '✅';
+          const st = document.getElementById('statusText');
+          st.textContent = '安否確認完了！'; st.className = 'status-text status-green';
+          document.getElementById('statusTime').textContent = '確認時刻: ' + formatDate(new Date().toISOString());
+          document.getElementById('loading').textContent = '家族に通知しました';
+          setTimeout(() => { document.getElementById('loading').textContent = ''; }, 3000);
+        }
+      } catch (e) {
+        document.getElementById('loading').textContent = '送信に失敗しました';
+      }
+    }
+
+    function callFamily() {
+      liff.sendMessages([{type:'text', text:'家族と話したいです'}]);
+      alert('メッセージを送りました。');
+    }
+
+    function showSOS() { document.getElementById('sosModal').classList.add('active'); }
+    function hideSOS() { document.getElementById('sosModal').classList.remove('active'); }
+
+    // 优化版 SOS：直接调用专用 API，不再依赖发消息触发 Webhook
+    async function sendSOS() {
+      hideSOS();
+      document.getElementById('loading').textContent = 'SOS送信中...';
+      try {
+        const res = await fetch(CONFIG.GAS_URL + '?action=sendSOS&userId=' + userId);
+        const data = await res.json();
+        if (data.status === 'ok') {
+          document.getElementById('loading').textContent = 'SOSを送信しました。助けが来るまで待っていてください。';
+          setTimeout(() => liff.closeWindow(), 3000);
+        } else {
+          throw new Error(data.message);
+        }
+      } catch (e) {
+        document.getElementById('loading').textContent = 'SOS送信に失敗しました。直接電話で連絡してください。';
+      }
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
