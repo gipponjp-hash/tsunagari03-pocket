@@ -5,7 +5,7 @@
 
 const CONFIG = {
   // Google Apps Script 部署后的 Web App URL
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbw6tZjutXvxmpVKFtP7leS4zJ20y2jPQwld6sabqvSNTCUtb1CwSS2IDLkJHJZCt-7x/exec',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbw_RwhbQNzVv-yujPnkRS3WhyDILkU0_2l7_nS8F3EGppNslG8fxo2hO80FTtqFM-JX/exec/exec',
   
   // LINE Developers → LIFF → 老人端 ID
   LIFF_ID_SENIOR: '2011029499-WzxNBtV1',
